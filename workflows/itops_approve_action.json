@@ -1,0 +1,97 @@
+{
+  "name": "IT Ops - Approve Action",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approve-itops",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "approve-itops"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\n\nconst alertId = body.alert_id || body.alertId;\nconst action = body.action || 'APPROVED';\nconst approvedBy = body.approved_by || 'SRE Engineer';\n\nreturn {\n  json: {\n    alertId,\n    action,\n    approvedBy,\n    approvedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "process",
+      "name": "Process Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "PendingApprovals", "mode": "list" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "alert_id": "={{ $json.alertId }}",
+            "status": "={{ $json.action }}",
+            "approved_by": "={{ $json.approvedBy }}"
+          }
+        },
+        "options": {
+          "columnToMatchOn": "alert_id"
+        }
+      },
+      "id": "update-pending",
+      "name": "Update PendingApprovals",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "ActionLog", "mode": "list" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action_id": "={{ 'ACT-' + Date.now().toString().slice(-6) }}",
+            "priority": "P1",
+            "server": "={{ $json.alertId }}",
+            "alert_type": "critical",
+            "action_taken": "={{ $json.action === 'APPROVED' ? 'Failover executed' : 'Action cancelled' }}",
+            "approved_by": "={{ $json.approvedBy }}",
+            "status": "={{ $json.action }}",
+            "created_at": "={{ $json.approvedAt }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log to ActionLog",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'SUCCESS', message: 'Action ' + $json.action, alertId: $json.alertId, approvedBy: $json.approvedBy }) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Process Approval", "type": "main", "index": 0 }]] },
+    "Process Approval": { "main": [[{ "node": "Update PendingApprovals", "type": "main", "index": 0 }]] },
+    "Update PendingApprovals": { "main": [[{ "node": "Log to ActionLog", "type": "main", "index": 0 }]] },
+    "Log to ActionLog": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
