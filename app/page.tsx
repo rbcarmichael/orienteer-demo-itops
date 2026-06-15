@@ -216,12 +216,17 @@ export default function Home() {
 
       // Auto-actions for P2/P3
       if (result.priority !== "P1") {
+        const boundedActions: Record<string, string> = {
+          disk_usage: "Temp files cleared — production data untouched",
+          memory_usage: "Service restarted — no data modified",
+        };
         setTimeout(() => {
           addAction({
             id: genActionId(),
             server: incident.server,
             action:
-              result.recommendation ||
+              boundedActions[incident.alert_type] ??
+              result.recommendation ??
               (result.priority === "P2" ? "Auto-remediate" : "Log only"),
             approver: "SYSTEM",
             timestamp: new Date().toLocaleTimeString(),
@@ -364,9 +369,14 @@ function AlertCard({
   const { incident, result, timestamp, actionStatus } = entry;
   const priority = result.priority.toLowerCase();
   const progressClass = getProgressClass(incident.value);
+  const boundedActionLabels: Record<string, string> = {
+    disk_usage: "Temp files cleared — production data untouched",
+    memory_usage: "Service restarted — no data modified",
+  };
   const autoAction =
-    result.recommendation ||
-    (result.priority === "P2" ? "Auto-remediate" : "Log only");
+    result.priority === "P2"
+      ? (boundedActionLabels[incident.alert_type] ?? result.recommendation ?? "Auto-remediated")
+      : (result.recommendation ?? "Log and monitor");
 
   return (
     <div className={`alert-item ${priority}`}>
